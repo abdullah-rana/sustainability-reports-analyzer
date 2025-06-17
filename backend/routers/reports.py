@@ -34,14 +34,18 @@ SESSION_COOKIE_NAME = "session_id"
 
 # Dependency to get or create session ID
 def get_or_create_session_id(
-    session_id: Optional[str] = Cookie(None), response: Response = None
+    # session_id: Optional[str] = Cookie(None), response: Response = None
+    request: Request,
+    response: Response,
+    session_id: Optional[str] = Cookie(None),
 ) -> str:
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        if response:
-            response.set_cookie(
-                key=SESSION_COOKIE_NAME, value=session_id, httponly=True
-            )
+    if session_id:
+        return session_id
+    # Create new session_id
+    session_id = str(uuid.uuid4())
+
+    # Set session cookie (will persist for the browser session)
+    response.set_cookie(key=SESSION_COOKIE_NAME, value=session_id, samesite="lax")
     return session_id
 
 
@@ -91,12 +95,17 @@ async def upload_file(
     session_folder = os.path.join(DATA_FOLDER, "uploaded_reports", session_id)
     Path(session_folder).mkdir(exist_ok=True)
 
+    print(f"1-{session_folder=}")
+
     uploaded_report = os.path.join(session_folder, file.filename)
     with open(uploaded_report, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     # Parse the uploaded report and generate the json output file
-    run_parser(uploaded_report)
+    # run_parser(uploaded_report)
+
+    # copy sample json resultant file and place it in the session folder
+    shutil.copy("./data/existing_reports/netflix.json", f"{session_folder}")
 
     # await asyncio.sleep(5)
 
@@ -119,8 +128,13 @@ async def upload_file(
 
 def list_uploaded_files(session_id: str) -> List[str]:
     session_folder = os.path.join(DATA_FOLDER, "uploaded_reports", session_id)
+    print(f"2-{session_folder=}")
     if not Path(session_folder).exists():
         return []
+
+    for f in Path(session_folder).glob("*.json"):
+        print(f.name)
+
     return sorted(
         [
             f.name.replace(".json", "")
@@ -131,7 +145,13 @@ def list_uploaded_files(session_id: str) -> List[str]:
 
 
 @router.get("/my-reports")
-def get_my_reports(session_id: str = Depends(get_or_create_session_id)) -> Any:
+def get_my_reports(
+    request: Request,
+    response: Response,
+    session_id: str = Depends(get_or_create_session_id),
+) -> Any:
+    print("my reports called")
+    print("session_id", session_id)
     return list_uploaded_files(session_id)
 
 
